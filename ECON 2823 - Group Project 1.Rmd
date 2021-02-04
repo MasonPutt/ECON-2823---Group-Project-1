@@ -1,0 +1,76 @@
+---
+title: "ECON 2823 - Group Project 1"
+author: "Mason Putt"
+date: "2/3/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+inTeams<-read.csv("~/Desktop/ECON 2823 - Group Project 1/spi_global_rankings.csv")
+head(inTeams)
+```
+
+```{r}
+mean.off<-mean(inTeams$off)
+mean.def<-mean(inTeams$def)
+lmean.off<-mean(log(inTeams$off))
+lmean.def<-mean(log(inTeams$def))
+```
+
+```{r}
+premLeague<-subset(inTeams,league=="Barclays Premier League")
+premTeams<-premLeague$name
+rownames(premLeague)<-premTeams
+df.prem<-premLeague[,c("off","def")]
+```
+
+```{r}
+df.prem["alpha"]<-log(df.prem["off"])-lmean.def
+df.prem["delta"]<-lmean.off-log(df.prem["def"])
+head(df.prem)
+```
+
+```{r}
+alphaList<-df.prem$alpha
+deltaList<-df.prem$delta
+names(alphaList)<-rownames(df.prem)
+names(deltaList)<-rownames(df.prem)
+```
+
+```{r}
+c(rpois(1,exp(alphaList["Liverpool"]-deltaList["Manchester City"])),
+  rpois(1,exp(alphaList["Manchester City"]-deltaList["Liverpool"])))
+```
+
+```{r}
+draw.score<-function(team1,team2){
+    c(
+        rpois(1,exp(alphaList[team1]-deltaList[team2])),
+  rpois(1,exp(alphaList[team2]-deltaList[team1]))
+    )
+}
+```
+
+```{r}
+#install.packages('gtools')
+library('gtools')
+# All possible matches in a season
+allMatches<-permutations(20, 2, v=rownames(df.prem),repeats.allowed=FALSE)
+colnames(allMatches)<-c("home","away")
+head(allMatches)
+```
+
+```{r}
+# Example scores through the entire season
+ScoresMatrix <- matrix(nrow=nrow(allMatches),  ncol=4)
+for (ii in 1:nrow(allMatches)  ) {
+     ScoresMatrix[ii,1:2]=allMatches[ii,]
+     ScoresMatrix[ii,3:4]= draw.score(allMatches[ii,"home"],allMatches[ii,"away"] )  
+}
+colnames(ScoresMatrix)<-c("home.team","away.team","home.score","away.score")
+ScoresMatrix
+```

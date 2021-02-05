@@ -10,31 +10,22 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+# Data Setup
 inTeams<-read.csv("~/Desktop/ECON 2823 - Group Project 1/spi_global_rankings.csv")
-head(inTeams)
-```
 
-```{r}
 mean.off<-mean(inTeams$off)
 mean.def<-mean(inTeams$def)
 lmean.off<-mean(log(inTeams$off))
 lmean.def<-mean(log(inTeams$def))
-```
 
-```{r}
 premLeague<-subset(inTeams,league=="Barclays Premier League")
 premTeams<-premLeague$name
 rownames(premLeague)<-premTeams
 df.prem<-premLeague[,c("off","def")]
-```
 
-```{r}
 df.prem["alpha"]<-log(df.prem["off"])-lmean.def
 df.prem["delta"]<-lmean.off-log(df.prem["def"])
-head(df.prem)
-```
 
-```{r}
 alphaList<-df.prem$alpha
 deltaList<-df.prem$delta
 names(alphaList)<-rownames(df.prem)
@@ -42,35 +33,58 @@ names(deltaList)<-rownames(df.prem)
 ```
 
 ```{r}
-c(rpois(1,exp(alphaList["Liverpool"]-deltaList["Manchester City"])),
-  rpois(1,exp(alphaList["Manchester City"]-deltaList["Liverpool"])))
-```
-
-```{r}
+# Setting up function to simulate scores
 draw.score<-function(team1,team2){
-    c(
-        rpois(1,exp(alphaList[team1]-deltaList[team2])),
-  rpois(1,exp(alphaList[team2]-deltaList[team1]))
-    )
-}
-```
+    c(rpois(1,exp(alphaList[team1]-deltaList[team2])),
+  rpois(1,exp(alphaList[team2]-deltaList[team1])))}
 
-```{r}
-#install.packages('gtools')
-library('gtools')
-# All possible matches in a season
+# Loading necessary packages
+library(gtools)
+library(tidyverse)
+library(plyr)
+
+# Sets matches for a simulated season
 allMatches<-permutations(20, 2, v=rownames(df.prem),repeats.allowed=FALSE)
 colnames(allMatches)<-c("home","away")
-head(allMatches)
-```
 
-```{r}
-# Example scores through the entire season
-ScoresMatrix <- matrix(nrow=nrow(allMatches),  ncol=4)
-for (ii in 1:nrow(allMatches)  ) {
-     ScoresMatrix[ii,1:2]=allMatches[ii,]
-     ScoresMatrix[ii,3:4]= draw.score(allMatches[ii,"home"],allMatches[ii,"away"] )  
-}
-colnames(ScoresMatrix)<-c("home.team","away.team","home.score","away.score")
-ScoresMatrix
+# Setting number of simulations to be replicated
+n.sims=100
+
+# Sets up the replication
+a <- as.data.frame(replicate(n.sims, {
+  # Creates blank data frame to store each simulation
+  ScoresMatrix <- as.data.frame(matrix(nrow=nrow(allMatches),  ncol=6))
+  colnames(ScoresMatrix)<-c("home.team","away.team","home.goals","away.goals", "home.points", "away.points")
+  # Populates blank data frame with matches, goals, and corresponding points for win/tie/loss
+  for (ii in 1:nrow(allMatches)) {
+    ScoresMatrix[ii,1:2]= allMatches[ii,]
+    ScoresMatrix[ii,3:4]= draw.score(allMatches[ii,"home"],allMatches[ii,"away"])
+    ScoresMatrix[ii, 5]=  ifelse(ScoresMatrix[ii, 3]>ScoresMatrix[ii, 4], 3, ifelse(ScoresMatrix[ii, 3]==ScoresMatrix[ii, 4], 1, 0))
+    ScoresMatrix[ii, 6]=  ifelse(ScoresMatrix[ii, 4]>ScoresMatrix[ii, 3], 3, ifelse(ScoresMatrix[ii, 4]==ScoresMatrix[ii, 3], 1, 0)) }
+  # Transforms data frame to disregard who is home and who is away
+  ScoresMatrix <- rbind(
+    select(ScoresMatrix, team=home.team, goalsfor=home.goals, goalsagainst=away.goals, points=home.points), 
+    select(ScoresMatrix, team=away.team, goalsfor=away.goals, goalsagainst=home.goals, points=away.points))
+  # Sums goals scored, goals against, and points for each team (now we have results for one season)
+  ScoresMatrix <- aggregate(list(points=ScoresMatrix$points, goalsfor=ScoresMatrix$goalsfor, 
+                                 goalsagainst=ScoresMatrix$goalsagainst), by=list(team=ScoresMatrix$team), FUN=sum)
+  # Adds a variable to show goals differential (tiebreaker)
+  ScoresMatrix$goaldiff <- ScoresMatrix$goalsfor - ScoresMatrix$goalsagainst
+  # Sorts by goal differential
+  ScoresMatrix <- ScoresMatrix[order(-ScoresMatrix$goaldiff), ]
+  # Adds a ranking, tiebreaker is choosing first appearance (after sorting for goal differential)
+  ScoresMatrix$rank <- rank(desc(ScoresMatrix$points), ties.method = "first")
+  # Stores all six variables
+  ScoresMatrix[1:6]}))
+
+# Expands data frame to eliminate vectors from cells
+a <- unnest(select(as.data.frame(t(a)), team, rank), cols = c(team, rank))
+
+# Groups by team, takes mean and sd of their rankings
+aa <- ddply(a,~team,summarise,mean=mean(rank),sd=sd(rank))
+
+# Creates plot of average ranking
+rankplot <- ggplot(aa, aes(x=reorder(team, mean), y=mean))+geom_bar(stat='identity') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+rankplot
 ```

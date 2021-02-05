@@ -50,6 +50,9 @@ colnames(allMatches)<-c("home","away")
 # Setting number of simulations to be replicated
 n.sims=100
 
+# Adding earnings for each position
+earnings <- c(225, 210, 200, 190, 160, 153, 140, 125, 124, 122, 121, 118, 115, 110, 106, 103, 100, 52, 51, 49)
+
 # Sets up the replication
 a <- as.data.frame(replicate(n.sims, {
   # Creates blank data frame to store each simulation
@@ -74,17 +77,45 @@ a <- as.data.frame(replicate(n.sims, {
   ScoresMatrix <- ScoresMatrix[order(-ScoresMatrix$goaldiff), ]
   # Adds a ranking, tiebreaker is choosing first appearance (after sorting for goal differential)
   ScoresMatrix$rank <- rank(desc(ScoresMatrix$points), ties.method = "first")
+  #Sort by 
+  ScoresMatrix %>%
+    arrange(desc(rank))
+  ScoresMatrix$earnings <- earnings
   # Stores all six variables
-  ScoresMatrix[1:6]}))
+  ScoresMatrix[1:7]}))
+```
 
-# Expands data frame to eliminate vectors from cells
-a <- unnest(select(as.data.frame(t(a)), team, rank), cols = c(team, rank))
+```{r}
+## PROBLEM 1
+
+# Un-nests data frame by ranking
+aa <- unnest(select(as.data.frame(t(a)), team, rank), cols = c(team, rank))
 
 # Groups by team, takes mean and sd of their rankings
-aa <- ddply(a,~team,summarise,mean=mean(rank),sd=sd(rank))
+aa <- ddply(aa,~team,summarise,mean=mean(rank),sd=sd(rank))
 
 # Creates plot of average ranking
-rankplot <- ggplot(aa, aes(x=reorder(team, mean), y=mean))+geom_bar(stat='identity') + 
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+rankplot <- ggplot(aa, aes(x=reorder(team, -mean), y=mean))+geom_bar(stat='identity', fill="#4eb14e") +  xlab("Team Names") + ylab("Expected Rank") + ggtitle("Visualization of Average Team Rankings") + coord_flip()
 rankplot
+```
+
+```{r}
+## PROBLEM 2
+
+# Un-nests data frame by earnings
+bb <- unnest(select(as.data.frame(t(a)), team, earnings), cols = c(team, earnings))
+bb <- ddply(bb,~team,summarise,mean=mean(earnings),sd=sd(earnings))
+```
+
+```{r}
+## PROBLEM 3
+
+# Un-nests data frame by points
+cc <- unnest(select(as.data.frame(t(a)), team, points), cols = c(team, points))
+cc <- ddply(cc,~team,summarise,mean=mean(points),sd=sd(points))
+```
+
+```{r}
+## PROBLEM 4
+
 ```

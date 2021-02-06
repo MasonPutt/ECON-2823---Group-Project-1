@@ -9,47 +9,41 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+## Setup
+
+```{r message=FALSE}
 # Data Setup
 inTeams<-read.csv("~/Desktop/ECON 2823 - Group Project 1/spi_global_rankings.csv")
-
 mean.off<-mean(inTeams$off)
 mean.def<-mean(inTeams$def)
 lmean.off<-mean(log(inTeams$off))
 lmean.def<-mean(log(inTeams$def))
-
 premLeague<-subset(inTeams,league=="Barclays Premier League")
 premTeams<-premLeague$name
 rownames(premLeague)<-premTeams
 df.prem<-premLeague[,c("off","def")]
-
 df.prem["alpha"]<-log(df.prem["off"])-lmean.def
 df.prem["delta"]<-lmean.off-log(df.prem["def"])
-
 alphaList<-df.prem$alpha
 deltaList<-df.prem$delta
 names(alphaList)<-rownames(df.prem)
 names(deltaList)<-rownames(df.prem)
 ```
 
-```{r}
+```{r message=FALSE}
 # Setting up function to simulate scores
 draw.score<-function(team1,team2){
     c(rpois(1,exp(alphaList[team1]-deltaList[team2])),
   rpois(1,exp(alphaList[team2]-deltaList[team1])))}
-
 # Loading necessary packages
 library(gtools)
 library(tidyverse)
 library(plyr)
-
 # Sets matches for a simulated season
 allMatches<-permutations(20, 2, v=rownames(df.prem),repeats.allowed=FALSE)
 colnames(allMatches)<-c("home","away")
-
 # Setting number of simulations to be replicated
 n.sims=100
-
 # Adding earnings for each position
 earnings <- c(225, 210, 200, 190, 160, 153, 140, 125, 124, 122, 121, 118, 115, 110, 106, 103, 100, 52, 51, 49)
 
@@ -68,54 +62,112 @@ a <- as.data.frame(replicate(n.sims, {
   ScoresMatrix <- rbind(
     select(ScoresMatrix, team=home.team, goalsfor=home.goals, goalsagainst=away.goals, points=home.points), 
     select(ScoresMatrix, team=away.team, goalsfor=away.goals, goalsagainst=home.goals, points=away.points))
-  # Sums goals scored, goals against, and points for each team (now we have results for one season)
+  # Sums goals scored, goals against, and points for each team
   ScoresMatrix <- aggregate(list(points=ScoresMatrix$points, goalsfor=ScoresMatrix$goalsfor, 
                                  goalsagainst=ScoresMatrix$goalsagainst), by=list(team=ScoresMatrix$team), FUN=sum)
   # Adds a variable to show goals differential (tiebreaker)
   ScoresMatrix$goaldiff <- ScoresMatrix$goalsfor - ScoresMatrix$goalsagainst
+  
+## NOTE: this tiebreaker is currently only breaking ties based on goal differential, it needs to then revert to breaking ties by "pointsfor", and then with a random, uniform draw.
+
   # Sorts by goal differential
   ScoresMatrix <- ScoresMatrix[order(-ScoresMatrix$goaldiff), ]
   # Adds a ranking, tiebreaker is choosing first appearance (after sorting for goal differential)
   ScoresMatrix$rank <- rank(desc(ScoresMatrix$points), ties.method = "first")
-  #Sort by 
+  #Sort by rank and add earnings for that rank
   ScoresMatrix %>%
     arrange(desc(rank))
   ScoresMatrix$earnings <- earnings
-  # Stores all six variables
+  # Stores all seven variables
   ScoresMatrix[1:7]}))
 ```
 
-```{r}
-## PROBLEM 1
+# PROBLEM 1
 
+```{r message=FALSE}
 # Un-nests data frame by ranking
 aa <- unnest(select(as.data.frame(t(a)), team, rank), cols = c(team, rank))
-
 # Groups by team, takes mean and sd of their rankings
 aa <- ddply(aa,~team,summarise,mean=mean(rank),sd=sd(rank))
-
 # Creates plot of average ranking
-rankplot <- ggplot(aa, aes(x=reorder(team, -mean), y=mean))+geom_bar(stat='identity', fill="#4eb14e") +  xlab("Team Names") + ylab("Expected Rank") + ggtitle("Visualization of Average Team Rankings") + coord_flip()
-rankplot
+rankplot <- ggplot(aa, aes(x=reorder(team, -mean), y=mean))+geom_bar(stat='identity', fill="#4eb14e") +  xlab("Team Names") + ylab("Expected Rank") + ggtitle("Average Team Rankings Over 10,000 Simulations") + coord_flip()
 ```
 
-```{r}
-## PROBLEM 2
+# PROBLEM 2
 
+```{r message=FALSE}
 # Un-nests data frame by earnings
 bb <- unnest(select(as.data.frame(t(a)), team, earnings), cols = c(team, earnings))
 bb <- ddply(bb,~team,summarise,mean=mean(earnings),sd=sd(earnings))
+
+# Create visualization
 ```
 
-```{r}
-## PROBLEM 3
+# PROBLEM 3
 
+```{r message=FALSE}
 # Un-nests data frame by points
 cc <- unnest(select(as.data.frame(t(a)), team, points), cols = c(team, points))
 cc <- ddply(cc,~team,summarise,mean=mean(points),sd=sd(points))
+cc <- cc[order(-cc$mean),]
+cc$oldrank <- rank(desc(cc$mean))
+cc$oldearnings <- earnings
+#Set up blank data frame to be filled via looping
+vec <- as.data.frame(matrix(nrow=1,  ncol=20))
+# Fills "vec" with values of hypothetical ranking if team point average went up by 3, holding all else constant
+for (i in 1:nrow(cc)) {
+  cc[i,2] =  cc[i,2]+3
+  vec[i] <- rank(desc(cc$mean))[i]
+  cc[i,2] =  cc[i,2]-3
+}
+# Transposes data frame so all new ranks are in one column
+vec <- t(vec)
+# Adds these new rankings to cc data frame
+cc$newrank <- vec
+# Calculates difference in earnings between old and new rank
+for(i in 1:20) {
+  cc$newearnings <- ifelse(cc$oldrank==cc$newrank, cc$oldearnings,
+                           ifelse(cc$oldrank-1==cc$newrank, lag(cc$oldearnings,1), 
+                                  ifelse(cc$oldrank-2==cc$newrank, lag(cc$oldearnings,2), 
+                                         ifelse(cc$oldrank-3==cc$newrank, lag(cc$oldearnings,3), NA))))}
+cc$diffearn <- cc$newearnings - cc$oldearnings
+
+earnplot <- ggplot(cc, aes(x=reorder(team, diffearn), y=diffearn)) +geom_bar(stat='identity', fill="#CFB53B") + xlab("Team Names") + ylab('Additional Earnings (Millions of £)' ) + ggtitle('Additional Earnings from a "Lucky Win"') +coord_flip()
 ```
 
-```{r}
-## PROBLEM 4
+# PROBLEM 4
+
+```{r message=FALSE}
+# for(i in 1:20)
+# 40 more simulations
+```
+
+
+
+# APPENDIX: 
+
+### Problem 1
+
+```{r message=FALSE}
+aa
+rankplot
+```
+
+### Problem 2
+
+```{r message=FALSE}
+bb
+```
+
+### Problem 3
+
+```{r message=FALSE}
+check <- select(cc, "team", "oldrank", "oldearnings","newrank", "newearnings", "diffearn")
+earnplot
+```
+
+### Problem 4
+
+```{r message=FALSE}
 
 ```

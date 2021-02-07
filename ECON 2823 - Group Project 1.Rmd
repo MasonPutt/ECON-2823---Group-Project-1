@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Setup
 
-```{r message=FALSE}
+```{r message=FALSE, echo=FALSE}
 # Data Setup
 inTeams<-read.csv("~/Desktop/ECON 2823 - Group Project 1/spi_global_rankings.csv")
 mean.off<-mean(inTeams$off)
@@ -30,7 +30,7 @@ names(alphaList)<-rownames(df.prem)
 names(deltaList)<-rownames(df.prem)
 ```
 
-```{r message=FALSE}
+```{r message=FALSE, echo=FALSE}
 # Setting up function to simulate scores
 draw.score<-function(team1,team2){
     c(rpois(1,exp(alphaList[team1]-deltaList[team2])),
@@ -43,7 +43,7 @@ library(plyr)
 allMatches<-permutations(20, 2, v=rownames(df.prem),repeats.allowed=FALSE)
 colnames(allMatches)<-c("home","away")
 # Setting number of simulations to be replicated
-n.sims=100
+n.sims=5
 # Adding earnings for each position
 earnings <- c(225, 210, 200, 190, 160, 153, 140, 125, 124, 122, 121, 118, 115, 110, 106, 103, 100, 52, 51, 49)
 
@@ -80,20 +80,18 @@ a <- as.data.frame(replicate(n.sims, {
 
 # PROBLEM 1
 
-```{r message=FALSE}
+```{r message=FALSE, echo=FALSE}
 # Un-nests data frame by ranking
 aa <- unnest(select(as.data.frame(t(a)), team, rank), cols = c(team, rank))
 # Groups by team, takes mean and sd of their rankings
 aa <- ddply(aa,~team,summarise,mean=mean(rank),sd=sd(rank))
 # Creates plot of average ranking
-rankplot <- ggplot(aa, aes(x=reorder(team, -mean), y=mean))+geom_bar(stat='identity', fill="#4eb14e") +  xlab("Team Names") + ylab("Average Rank") + ggtitle("Average Team Rankings Over 10,000 Simulations") + coord_flip()
-
-rankplot
+rankplot <- ggplot(aa, aes(x=reorder(team, -mean), y=mean))+geom_bar(stat='identity', fill="#4eb14e") +  xlab("Team Name") + ylab("Average Rank") + ggtitle("Average Team Rankings Over 10,000 Simulations") + coord_flip()
 ```
 
 # PROBLEM 2
 
-```{r message=FALSE}
+```{r message=FALSE, echo=FALSE}
 # Un-nests data frame by earnings
 bb <- unnest(select(as.data.frame(t(a)), team, earnings), cols = c(team, earnings))
 bb <- ddply(bb,~team,summarise,mean=mean(earnings),sd=sd(earnings))
@@ -102,7 +100,7 @@ bb <- bb[order(-bb$sd),]
 
 # PROBLEM 3
 
-```{r message=FALSE}
+```{r message=FALSE, echo=FALSE}
 # Un-nests data frame by points
 cc <- unnest(select(as.data.frame(t(a)), team, points), cols = c(team, points))
 cc <- ddply(cc,~team,summarise,mean=mean(points),sd=sd(points))
@@ -114,7 +112,7 @@ vec <- as.data.frame(matrix(nrow=1,  ncol=20))
 # Fills "vec" with values of hypothetical ranking if team point average went up by 3, holding all else constant
 for (i in 1:nrow(cc)) {
   cc[i,2] =  cc[i,2]+3
-  vec[i] <- rank(desc(cc$mean))[i]
+  vec[i] <- rank(desc(cc$mean), ties.method = "first")[i]
   cc[i,2] =  cc[i,2]-3
 }
 # Transposes data frame so all new ranks are in one column
@@ -126,48 +124,141 @@ for(i in 1:20) {
   cc$newearnings <- ifelse(cc$oldrank==cc$newrank, cc$oldearnings,
                            ifelse(cc$oldrank-1==cc$newrank, lag(cc$oldearnings,1), 
                                   ifelse(cc$oldrank-2==cc$newrank, lag(cc$oldearnings,2), 
-                                         ifelse(cc$oldrank-3==cc$newrank, lag(cc$oldearnings,3), NA))))}
+                                         ifelse(cc$oldrank-3==cc$newrank, lag(cc$oldearnings,3), 
+                                                ifelse(cc$oldrank-4==cc$newrank, lag(cc$oldearnings,4), 
+                                                       ifelse(cc$oldrank-5==cc$newrank, lag(cc$oldearnings,5), NA))))))}
 cc$diffearn <- cc$newearnings - cc$oldearnings
 
-earnplot <- ggplot(cc, aes(x=reorder(team, diffearn), y=diffearn)) +geom_bar(stat='identity', fill="#CFB53B") + xlab("Team Names") + ylab('Additional Earnings (Millions of £)' ) + ggtitle('Additional Earnings from a "Lucky Win"') +coord_flip()
-earnplot
+earnplot <- ggplot(cc, aes(x=reorder(team, diffearn), y=diffearn)) +geom_bar(stat='identity', fill="#CFB53B") + xlab("Team Name") + ylab('Additional Earnings (Millions of £)' ) + ggtitle('Additional Earnings from a "Lucky Win"') +coord_flip()
 ```
-
-Sheffield United benefits the most from adding 3 to their expected total points - it bumps their expected rank from 18 to 17, which results in an earnings increase of £51 million. Tottenham Hotspur would move from an expected rank of 7 to 5, which would increase their earnings by £20 million. Many teams would see no change in their expected rank, which corresponds to no change in earnings.
 
 # PROBLEM 4
 
-```{r message=FALSE}
+```{r message=FALSE, echo=FALSE}
+elist <- as.data.frame(matrix(nrow=1,  ncol=20))
 
+for (i in 1:20) {
+
+  alphaList2 <- (log(df.prem["off"]+(.1*(df.prem["off"])))-lmean.def)$off
+  alphaList[i] <- alphaList2[i]
+
+  a <- as.data.frame(replicate(n.sims, {
+       ScoresMatrix <- as.data.frame(matrix(nrow=nrow(allMatches),  ncol=6))
+       colnames(ScoresMatrix)<-c("home.team","away.team","home.goals","away.goals", "home.points", "away.points")
+       for (ii in 1:nrow(allMatches)) {
+         ScoresMatrix[ii,1:2]= allMatches[ii,]
+         ScoresMatrix[ii,3:4]= draw.score(allMatches[ii,"home"],allMatches[ii,"away"])
+         ScoresMatrix[ii, 5]=  ifelse(ScoresMatrix[ii, 3]>ScoresMatrix[ii, 4], 3, ifelse(ScoresMatrix[ii, 3]==ScoresMatrix[ii, 4], 1, 0))
+         ScoresMatrix[ii, 6]=  ifelse(ScoresMatrix[ii, 4]>ScoresMatrix[ii, 3], 3, ifelse(ScoresMatrix[ii, 4]==ScoresMatrix[ii, 3], 1, 0)) }
+       ScoresMatrix <- rbind(
+         select(ScoresMatrix, team=home.team, goalsfor=home.goals, goalsagainst=away.goals, points=home.points), 
+         select(ScoresMatrix, team=away.team, goalsfor=away.goals, goalsagainst=home.goals, points=away.points))
+       ScoresMatrix <- aggregate(list(points=ScoresMatrix$points, goalsfor=ScoresMatrix$goalsfor, 
+                                 goalsagainst=ScoresMatrix$goalsagainst), by=list(team=ScoresMatrix$team), FUN=sum)
+       ScoresMatrix$goaldiff <- ScoresMatrix$goalsfor - ScoresMatrix$goalsagainst
+       ScoresMatrix <- ScoresMatrix[order(-ScoresMatrix$goaldiff, -ScoresMatrix$goalsfor, runif(20)), ]
+       ScoresMatrix$rank <- rank(desc(ScoresMatrix$points), ties.method = "first")
+       ScoresMatrix <- ScoresMatrix[order(ScoresMatrix$rank),]
+       ScoresMatrix$earnings <- earnings
+       ScoresMatrix[1:7]}))
+  
+  bb1 <- unnest(select(as.data.frame(t(a)), team, earnings), cols = c(team, earnings))
+  bb1 <- ddply(bb1,~team,summarise,mean=mean(earnings),sd=sd(earnings))
+  bb1 <- bb1[order(-bb1$mean),]
+  
+  elist[i] <- bb1$mean[i]
+  
+  alphaList2 <- (log(df.prem["off"])-lmean.def)$off
+  alphaList[i] <- alphaList2[i]
+}
+
+elist <- t(elist)
+bb1 <- bb1[order(-bb1$mean),]
+bb1$newoffearn <- elist
+
+elist2 <- as.data.frame(matrix(nrow=1,  ncol=20))
+
+for (i in 1:20) {
+
+  deltaList2 <- (lmean.off-log(df.prem["def"]-(.1*(df.prem["def"]))))$def
+  deltaList[i] <- deltaList2[i]
+
+  a <- as.data.frame(replicate(n.sims, {
+       ScoresMatrix <- as.data.frame(matrix(nrow=nrow(allMatches),  ncol=6))
+       colnames(ScoresMatrix)<-c("home.team","away.team","home.goals","away.goals", "home.points", "away.points")
+       for (ii in 1:nrow(allMatches)) {
+         ScoresMatrix[ii,1:2]= allMatches[ii,]
+         ScoresMatrix[ii,3:4]= draw.score(allMatches[ii,"home"],allMatches[ii,"away"])
+         ScoresMatrix[ii, 5]=  ifelse(ScoresMatrix[ii, 3]>ScoresMatrix[ii, 4], 3, ifelse(ScoresMatrix[ii, 3]==ScoresMatrix[ii, 4], 1, 0))
+         ScoresMatrix[ii, 6]=  ifelse(ScoresMatrix[ii, 4]>ScoresMatrix[ii, 3], 3, ifelse(ScoresMatrix[ii, 4]==ScoresMatrix[ii, 3], 1, 0)) }
+       ScoresMatrix <- rbind(
+         select(ScoresMatrix, team=home.team, goalsfor=home.goals, goalsagainst=away.goals, points=home.points), 
+         select(ScoresMatrix, team=away.team, goalsfor=away.goals, goalsagainst=home.goals, points=away.points))
+       ScoresMatrix <- aggregate(list(points=ScoresMatrix$points, goalsfor=ScoresMatrix$goalsfor, 
+                                 goalsagainst=ScoresMatrix$goalsagainst), by=list(team=ScoresMatrix$team), FUN=sum)
+       ScoresMatrix$goaldiff <- ScoresMatrix$goalsfor - ScoresMatrix$goalsagainst
+       ScoresMatrix <- ScoresMatrix[order(-ScoresMatrix$goaldiff, -ScoresMatrix$goalsfor, runif(20)), ]
+       ScoresMatrix$rank <- rank(desc(ScoresMatrix$points), ties.method = "first")
+       ScoresMatrix <- ScoresMatrix[order(ScoresMatrix$rank),]
+       ScoresMatrix$earnings <- earnings
+       ScoresMatrix[1:7]}))
+  
+  bb2 <- unnest(select(as.data.frame(t(a)), team, earnings), cols = c(team, earnings))
+  bb2 <- ddply(bb2,~team,summarise,mean=mean(earnings),sd=sd(earnings))
+  bb2 <- bb2[order(-bb2$mean),]
+  
+  elist2[i] <- bb2$mean[i]
+  
+  deltaList2 <- (lmean.off-log(df.prem["def"]))$def
+  deltaList[i] <- deltaList2[i]
+}
+
+elist2 <- t(elist2)
+bb2 <- bb2[order(-bb2$mean),]
+bb2$newdefearn <- elist2
+bb2 <- select(bb2, team, newdefearn)
+
+FINAL <- merge(bb1, bb2, by="team")
+
+FINAL <- select(FINAL, team, oldearn=mean, newoffearn, newdefearn)
+
+FINAL$offinc <- ifelse(FINAL$newoffearn - FINAL$oldearn >0, FINAL$newoffearn - FINAL$oldearn, 0)
+FINAL$definc <- ifelse(FINAL$newdefearn - FINAL$oldearn >0, FINAL$newdefearn - FINAL$oldearn, 0)
+
+offplot <- ggplot(FINAL, aes(x=reorder(team, offinc), y=offinc)) + geom_bar(stat = "identity", position = 'dodge', fill="dodgerblue1") +coord_flip() + xlab("Team Name") + ylab('Additional Earnings (Millions of £)' ) + ggtitle('Additional Expected Earnings from a 10% Increase \nin Expected Goals Scored')
+
+defplot <- ggplot(FINAL, aes(x=reorder(team, definc), y=definc)) + geom_bar(stat = "identity", position = 'dodge', fill="firebrick2") +coord_flip() + xlab("Team Name") + ylab('Additional Earnings (Millions of £)' ) + ggtitle('Additional Expected Earnings from a 10% Decrease \nin Expected Goals Conceded')
 ```
-
 
 
 # APPENDIX: 
 
 ### Problem 1
 
-```{r message=FALSE}
+```{r message=FALSE, echo=FALSE}
 aa
+rankplot
 ```
 
 ### Problem 2
 
-```{r message=FALSE}
-bb
+```{r message=FALSE, echo=FALSE}
+select(bb, "team", "mean", "sd")
 ```
 
 ### Problem 3
 
 The "diffearn" column shows how the earnings that correspond with their expected rank would change if a team had 3 extra points in each simulation. 
 
-```{r message=FALSE}
-cc <- select(cc, "team", "oldrank", "oldearnings","newrank", "newearnings", "diffearn")
-cc
+```{r message=FALSE, echo=FALSE}
+select(cc, "team", "oldrank","newrank", "diffearn")
+earnplot
 ```
 
 ### Problem 4
 
-```{r message=FALSE}
-
+```{r message=FALSE, echo=FALSE}
+select(FINAL, "team", "oldearn", "newoffearn", "newdefearn")
+offplot
+defplot
 ```

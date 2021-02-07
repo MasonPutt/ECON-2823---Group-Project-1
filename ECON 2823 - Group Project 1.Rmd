@@ -67,16 +67,12 @@ a <- as.data.frame(replicate(n.sims, {
                                  goalsagainst=ScoresMatrix$goalsagainst), by=list(team=ScoresMatrix$team), FUN=sum)
   # Adds a variable to show goals differential (tiebreaker)
   ScoresMatrix$goaldiff <- ScoresMatrix$goalsfor - ScoresMatrix$goalsagainst
-  
-## NOTE: this tiebreaker is currently only breaking ties based on goal differential, it needs to then revert to breaking ties by "pointsfor", and then with a random, uniform draw.
-
-  # Sorts by goal differential
-  ScoresMatrix <- ScoresMatrix[order(-ScoresMatrix$goaldiff), ]
-  # Adds a ranking, tiebreaker is choosing first appearance (after sorting for goal differential)
+  # Sorts by goal differential, then (if tied) goals for, then (if still tied) a uniform draw
+  ScoresMatrix <- ScoresMatrix[order(-ScoresMatrix$goaldiff, -ScoresMatrix$goalsfor, runif(20)), ]
+  # Adds a ranking, tiebreaker is choosing first appearance (after ordering for tie breakers)
   ScoresMatrix$rank <- rank(desc(ScoresMatrix$points), ties.method = "first")
   #Sort by rank and add earnings for that rank
-  ScoresMatrix %>%
-    arrange(desc(rank))
+  ScoresMatrix <- ScoresMatrix[order(ScoresMatrix$rank),]
   ScoresMatrix$earnings <- earnings
   # Stores all seven variables
   ScoresMatrix[1:7]}))
@@ -90,7 +86,9 @@ aa <- unnest(select(as.data.frame(t(a)), team, rank), cols = c(team, rank))
 # Groups by team, takes mean and sd of their rankings
 aa <- ddply(aa,~team,summarise,mean=mean(rank),sd=sd(rank))
 # Creates plot of average ranking
-rankplot <- ggplot(aa, aes(x=reorder(team, -mean), y=mean))+geom_bar(stat='identity', fill="#4eb14e") +  xlab("Team Names") + ylab("Expected Rank") + ggtitle("Average Team Rankings Over 10,000 Simulations") + coord_flip()
+rankplot <- ggplot(aa, aes(x=reorder(team, -mean), y=mean))+geom_bar(stat='identity', fill="#4eb14e") +  xlab("Team Names") + ylab("Average Rank") + ggtitle("Average Team Rankings Over 10,000 Simulations") + coord_flip()
+
+rankplot
 ```
 
 # PROBLEM 2
@@ -99,8 +97,7 @@ rankplot <- ggplot(aa, aes(x=reorder(team, -mean), y=mean))+geom_bar(stat='ident
 # Un-nests data frame by earnings
 bb <- unnest(select(as.data.frame(t(a)), team, earnings), cols = c(team, earnings))
 bb <- ddply(bb,~team,summarise,mean=mean(earnings),sd=sd(earnings))
-
-# Create visualization
+bb <- bb[order(-bb$sd),]
 ```
 
 # PROBLEM 3
@@ -133,13 +130,15 @@ for(i in 1:20) {
 cc$diffearn <- cc$newearnings - cc$oldearnings
 
 earnplot <- ggplot(cc, aes(x=reorder(team, diffearn), y=diffearn)) +geom_bar(stat='identity', fill="#CFB53B") + xlab("Team Names") + ylab('Additional Earnings (Millions of £)' ) + ggtitle('Additional Earnings from a "Lucky Win"') +coord_flip()
+earnplot
 ```
+
+Sheffield United benefits the most from adding 3 to their expected total points - it bumps their expected rank from 18 to 17, which results in an earnings increase of £51 million. Tottenham Hotspur would move from an expected rank of 7 to 5, which would increase their earnings by £20 million. Many teams would see no change in their expected rank, which corresponds to no change in earnings.
 
 # PROBLEM 4
 
 ```{r message=FALSE}
-# for(i in 1:20)
-# 40 more simulations
+
 ```
 
 
@@ -150,7 +149,6 @@ earnplot <- ggplot(cc, aes(x=reorder(team, diffearn), y=diffearn)) +geom_bar(sta
 
 ```{r message=FALSE}
 aa
-rankplot
 ```
 
 ### Problem 2
@@ -161,9 +159,11 @@ bb
 
 ### Problem 3
 
+The "diffearn" column shows how the earnings that correspond with their expected rank would change if a team had 3 extra points in each simulation. 
+
 ```{r message=FALSE}
-check <- select(cc, "team", "oldrank", "oldearnings","newrank", "newearnings", "diffearn")
-earnplot
+cc <- select(cc, "team", "oldrank", "oldearnings","newrank", "newearnings", "diffearn")
+cc
 ```
 
 ### Problem 4
